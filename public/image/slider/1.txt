@@ -1,0 +1,9 @@
+select nama_siswa, judul_buku,tanggal_tempo,denda from detail_pinjam
+
+inner join buku on detail_pinjam.kodebuku=buku.kode_buku
+inner join kembali on buku.kode_buku=kembali.kode_buku
+inner join pinjam on kembali.no_pinjam=pinjam.no_pinjam
+inner join anggota on pinjam.nis=anggota.nis
+where rayon='keling';
+
+tampilkan nama siswa judul buku tanggal tempo dan denda dari semua table dimana rayon keling

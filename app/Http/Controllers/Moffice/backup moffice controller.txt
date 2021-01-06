@@ -1,0 +1,219 @@
+<?php
+
+namespace App\Http\Controllers\Moffice;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Models\Structure as StructureModels;
+use App\Models\Bidang as BidangModels;
+use App\Models\Mruangrapat as RuangRapat;
+use App\Models\Mzoom as Zoom;
+use App\Models\Notification as NotificationModels;
+use App\Helpers\ApiData;
+use Auth;
+use DB;
+use Session;
+use Hash as Encrypt;
+
+class MofficeController extends Controller
+{
+    public function getIndex() {
+        return view('moffice.index');
+    }
+    
+    public function getSuratAll() {
+        return view('moffice.surat.all');
+    }
+    
+    /*-- -------------Return View Magic Code------------- */
+    
+    public function getRapat() {
+        return view('moffice.rapat.index');
+    }
+    
+    public function postAjaxRapat(Request $request) {
+        $data['data'] = RuangRapat::where('tanggal', $request->tanggal)->orderBy('jam_mulai', 'DESC')->get();
+        
+        return view('moffice.rapat.dataruang', $data);
+    }
+    
+    public function getZoom() {
+        return view('moffice.zoom.index');
+    }
+    
+    public function postAjaxZoom(Request $request) {
+        $data['data'] = Zoom::where('tanggal', $request->tanggal)->orderBy('jam_mulai', 'DESC')->get();
+        
+        return view('moffice.zoom.dataruang', $data);
+    }
+    
+    public function getUsers() {
+        $data['data']= StructureModels::get();
+        return view('moffice.user', $data);
+    }
+    public function getUsersUp($id) {
+        $data['data']= StructureModels::findOrFail($id);
+        return view('moffice.user.form', $data);
+    }
+    
+    public function getDataRuang() {
+        return view('moffice.rapat.ruang');
+    }
+    public function postDataRuangForm(Request $request, $form) {
+        
+        if($form == 'add') {
+            DB::table('m_ruang')->insert([
+                'name' => $request->name,
+            ]);
+        }else {
+            DB::table('m_ruang')->where('id', $request->id)->update([
+                'name' => $request->name,
+            ]);
+        }
+        
+        return redirect()->route('.moffice.data.ruang');
+    }
+    public function getDelDataRuang($id) {
+        DB::table('m_ruang')->where('id', $id)->delete();
+        return redirect()->route('.moffice.data.ruang');
+    }
+    
+    public function getDataBarang() {
+        return view('moffice.zoom.barang');
+    }
+    public function postDataBarangForm($form) {
+        
+        if($form == 'add') {
+            DB::table('m_barang')->insert([
+                'name' => $request->name,
+            ]);
+        }else {
+            DB::table('m_barang')->where('id', $request->id)->update([
+                'name' => $request->name,
+            ]);
+        }
+        
+        return redirect()->route('.moffice.data.barang');
+    }
+    public function getDelDataBarang($id) {
+        DB::table('m_barang')->where('id', $id)->delete();
+        return redirect()->route('.moffice.data.barang');
+    }
+    
+    /*-- -------------Add POST Proccess Magic Code------------- */
+    
+    public function postAddRapat(Request $request) {
+        $add = new RuangRapat;
+        $add->bidang_id = Auth::user()->bidang_id;
+        $add->user_id = Auth::user()->id;
+        $add->tanggal = $request->tanggal;
+        $add->jam_mulai = $request->jam_mulai;
+        $add->jam_selesai = $request->jam_selesai;
+        $add->kegiatan = $request->kegiatan;
+        $add->peminjam = $request->peminjam;
+        $add->keterangan = $request->keterangan;
+        
+        $ruang = DB::table('m_ruang')->get();
+        
+        foreach($ruang as $r){
+            if($request->has($r->id)){
+                $addRuang[] = $r->id;
+            }
+        }
+        
+        $add->ruang = json_encode($addRuang);
+        $add->save();
+        return view('moffice.index');
+    }
+    
+    public function postAddZoom(Request $request) {
+        $add = new Zoom;
+        $add->bidang_id = Auth::user()->bidang_id;
+        $add->user_id = Auth::user()->id;
+        $add->tanggal = $request->tanggal;
+        $add->jam_mulai = $request->jam_mulai;
+        $add->jam_selesai = $request->jam_selesai;
+        $add->kegiatan = $request->kegiatan;
+        $add->peminjam = $request->peminjam;
+        $add->keterangan = $request->keterangan;
+        
+        if($request->jenis == 'akun') {
+            $add->jenis = 'Peminjaman Akun Zoom';
+        }else {
+            
+            $add->jenis = 'Peminjaman Barang';
+            $barang = DB::table('m_barang')->get();
+        
+            foreach($barang as $r){
+                if($request->has($r->id)){
+                    $addBarang[] = $r->id;
+                }
+            }
+        
+            $add->barang = json_encode($addBarang);
+        }
+        $save = $add->save();
+        return view('moffice.index');
+    }
+    
+    /*-- -------------Edit POST Proccess Magic Code------------- */
+    
+    public function postUpRapat(Request $request, $id) {
+        return view('moffice.index');
+    }
+    
+    public function postUpZoom(Request $request, $id) {
+        return view('moffice.index');
+    }
+    
+    public function postUpUser(Request $request, $id) {
+        $up = StructureModels::findOrFail($id);
+        $up->nip = $request->nip;
+        $up->name = $request->name;
+        $up->position = $request->position;
+        $up->username = $request->username;
+        
+        if($request->password) {
+            $up->password = Encrypt($request->password);
+        }
+        
+        $save = $up->save();
+        if($save){
+            Session::flash('alert','Data Berhasil Di Simpan');
+            
+            $notif = NotificationModels::get();
+            foreach($notif as $n){
+                $data['phone_no'] = $n->nomor; 
+                $data['message'] = 'Pengeditan data user pada applikasi MOFFICE untuk ID : '.$id;
+                ApiData::wa($data);
+            }
+        }
+        return redirect()->route('.moffice.users');
+    }
+    
+    /*-- -------------Delete Proccess Magic Code------------- */
+    
+    public function getDelRapat($id) {
+        return redirect()->route('.moffice.users');
+    }
+    
+    public function getDelZoom($id) {
+        return redirect()->route('.moffice.users');
+    }
+    
+    public function getDelUsers($id) {
+        $data = StructureModels::find($id);
+        $destroy = $data->delete();
+        
+        if($destroy){
+            Session::flash('alert','Data Berhasil Di Hapus');
+            $notif = NotificationModels::get();
+            foreach($notif as $n){
+                $data['phone_no'] = $n->nomor; 
+                $data['message'] = 'Penghapusan data user pada applikasi MOFFICE oleh '.Auth::user()->username;
+                ApiData::wa($data);
+            }
+        }
+        return redirect()->route('.moffice.users');
+    }
+}
